@@ -18,6 +18,7 @@ import (
 type Page struct {
 	Title string
 	Time string
+	Links template.HTML
 }
 
 type Feed struct {
@@ -48,7 +49,6 @@ func initWorkgate() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer f.Close()
 
 	rx, err := regexp.Compile("([a-zA-Z0-9-_]+) = (.*)")
 	if err != nil {
@@ -66,6 +66,31 @@ func initWorkgate() {
 	if err = scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+	f.Close()
+
+	linkPattern := "<li><a href=\"%s\">%s</a></li>\n"
+	links := ""
+
+	f, err = os.Open("links.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	scanner = bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		match := rx.FindStringSubmatch(line)
+		if match != nil {
+			links += fmt.Sprintf(linkPattern, match[2], match[1])
+		}
+	}
+	if err = scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+	f.Close()
+
+	indexPage.Links = template.HTML(links)
+
 }
 
 func viewHandler(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +142,6 @@ func feedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// compile scss files here..
 func main() {
 	port := flag.String("p", "8080", "the port to bind on (ports below 1024 require root permissions)")
 	flag.Parse()
