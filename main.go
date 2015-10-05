@@ -9,15 +9,11 @@ import (
 	"io/ioutil"
 	"time"
 	"encoding/json"
+	"bufio"
+	"regexp"
+	"os"
 )
 
-// relevant feeds:
-// http://git.haproxy.org/?p=haproxy-1.5.git;a=atom
-// https://github.com/ClusterLabs/crmsh/commits/master.atom
-// https://github.com/ClusterLabs/resource-agents/commits/master.atom
-// https://github.com/ClusterLabs/hawk/commits/master.atom
-// https://github.com/ClusterLabs/pacemaker/commits/master.atom
-// https://github.com/ClusterLabs/fence-agents/commits/master.atom
 
 type Page struct {
 	Title string
@@ -34,53 +30,55 @@ type FeedData struct {
 	Data []byte
 }
 
-func viewHandler(w http.ResponseWriter, r *http.Request) {
-	t, err := template.ParseFiles("index.html")
-	if err != nil {
-		// handle error
-	}
-	p := &Page{
-		Title: "Work",
-		Time: time.Now().Format(time.RFC3339),
-	}
-	t.Execute(w, p)
-}
 
-var feeds []Feed = []Feed{
-	Feed{
-		Name: "haproxy",
-		Atom: "http://git.haproxy.org/?p=haproxy-1.5.git;a=atom",
-	},
-	Feed{
-		Name: "crmsh",
-		Atom: "https://github.com/ClusterLabs/crmsh/commits/master.atom",
-	},
-	Feed{
-		Name: "hawk",
-		Atom: "https://github.com/ClusterLabs/hawk/commits/master.atom",
-	},
-	Feed{
-		Name: "resource-agents",
-		Atom: "https://github.com/ClusterLabs/resource-agents/commits/master.atom",
-	},
-	Feed{
-		Name: "pacemaker",
-		Atom: "https://github.com/ClusterLabs/pacemaker/commits/master.atom",
-	},
-	Feed{
-		Name: "fence-agents",
-		Atom: "https://github.com/ClusterLabs/fence-agents/commits/master.atom",
-	},
-}
-
+var indexTemplate *template.Template
+var indexPage *Page = &Page{Title: "Work Dashboard", Time: time.Now().Format(time.RFC3339)}
+var feeds []Feed = []Feed{}
 var feedData map[string]FeedData = make(map[string]FeedData)
 
+
+func initWorkgate() {
+	t, err := template.ParseFiles("index.html")
+	if err != nil {
+		log.Fatal(err)
+	}
+	indexTemplate = t
+
+	f, err := os.Open("feeds.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	rx, err := regexp.Compile("([a-zA-Z0-9-_]+) = (.*)")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		match := rx.FindStringSubmatch(line)
+		if match != nil {
+			feeds = append(feeds, Feed{Name: match[1], Atom: match[2]})
+		}
+	}
+	if err = scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func viewHandler(w http.ResponseWriter, r *http.Request) {
+	indexPage.Time = time.Now().Format(time.RFC3339)
+	indexTemplate.Execute(w, indexPage)
+}
 
 func feedHandler(w http.ResponseWriter, r *http.Request) {
 	requestedFeed := r.URL.Path[len("/feed/"):]
 	if requestedFeed == "list" {
 		b, err := json.Marshal(feeds)
 		if err != nil {
+			log.Fatal(err)
 		}
 		w.Write(b)
 	} else {
@@ -100,11 +98,11 @@ func feedHandler(w http.ResponseWriter, r *http.Request) {
 					fmt.Printf("Fetching %s\n", feeds[i].Atom)
 					resp, err := http.Get(feeds[i].Atom)
 					if err != nil {
-						// handle error
+						log.Fatal(err)
 					}
 					body, err := ioutil.ReadAll(resp.Body)
 					if err != nil {
-						// handle error
+						log.Fatal(err)
 					}
 					w.Write(body)
 					resp.Body.Close()
@@ -124,6 +122,7 @@ func main() {
 	port := flag.String("p", "8080", "the port to bind on (ports below 1024 require root permissions)")
 	flag.Parse()
 	fmt.Printf("http://localhost:%s\n", *port)
+	initWorkgate()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", viewHandler)
 	mux.HandleFunc("/feed/", feedHandler)
