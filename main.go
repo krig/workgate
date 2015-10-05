@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io/ioutil"
 	"time"
+	"encoding/json"
 )
 
 // relevant feeds:
@@ -28,13 +29,18 @@ type Feed struct {
 	Atom string
 }
 
+type FeedData struct {
+	Updated time.Time
+	Data []byte
+}
+
 func viewHandler(w http.ResponseWriter, r *http.Request) {
 	t, err := template.ParseFiles("index.html")
 	if err != nil {
 		// handle error
 	}
 	p := &Page{
-		Title: "Workdash",
+		Title: "Work",
 		Time: time.Now().Format(time.RFC3339),
 	}
 	t.Execute(w, p)
@@ -67,21 +73,48 @@ var feeds []Feed = []Feed{
 	},
 }
 
+var feedData map[string]FeedData = make(map[string]FeedData)
+
+
 func feedHandler(w http.ResponseWriter, r *http.Request) {
 	requestedFeed := r.URL.Path[len("/feed/"):]
-	for i := range feeds {
-		if requestedFeed == feeds[i].Name {
-			resp, err := http.Get(feeds[i].Atom)
-			if err != nil {
-				// handle error
+	if requestedFeed == "list" {
+		b, err := json.Marshal(feeds)
+		if err != nil {
+		}
+		w.Write(b)
+	} else {
+		data, ok := feedData[requestedFeed]
+		if ok {
+			distance := time.Now().Sub(data.Updated)
+			if distance.Minutes() > 15 {
+				ok = false
+			} else {
+				fmt.Printf("Cached %s\n", requestedFeed)
+				w.Write(data.Data)
 			}
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				// handle error
+		}
+		if !ok {
+			for i := range feeds {
+				if requestedFeed == feeds[i].Name {
+					fmt.Printf("Fetching %s\n", feeds[i].Atom)
+					resp, err := http.Get(feeds[i].Atom)
+					if err != nil {
+						// handle error
+					}
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						// handle error
+					}
+					w.Write(body)
+					resp.Body.Close()
+					feedData[requestedFeed] = FeedData{
+						Updated: time.Now(),
+						Data: body,
+					}
+					break
+				}
 			}
-			w.Write(body)
-			resp.Body.Close()
-			break
 		}
 	}
 }

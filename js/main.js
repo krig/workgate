@@ -2,45 +2,49 @@ $(function() {
   moment.locale('sv');
 
   var feedTemplate = [
-    '<div class="col-md-12">',
-    '<h2>{{> title}}</h2>',
-    '<ul class="list-unstyled">',
+    '<div class="panel panel-default">',
+    '<div class="panel-heading">',
+    '<h3 class="panel-title">{{> title}}</h3>',
+    '</div>',
+    '<div class="panel-body">',
+    '<ul class="list-group">',
     '{{for items}}',
-    '<li><a href="{{:link}}">{{>title}}</a> <small>{{>updated}}</small></li>',
+    '<li class="list-group-item"><strong>{{>updated}}</strong> <a href="{{:link}}">{{>title}}</a> <small>{{>author}}</small></li>',
     '{{/for}}',
     '</ul>',
+    '</div>',
     '</div>'
   ].join('');
 
   $.templates("feedTemplate", feedTemplate);
 
-  var feeds = [
-    "haproxy",
-    "crmsh",
-    "hawk",
-    "resource-agents",
-    "pacemaker",
-    "fence-agents"
-  ];
+  $.getJSON("/feed/list", {}, function(feeds) {
+    feeds.sort(function(a, b) {
+      return a.Name.localeCompare(b.Name);
+    });
+    $.each(feeds, function(i, feed) {
+      $('.feedlist').append('<div class="feed-' + feed.Name + '"/>');
+    });
 
-  $.each(feeds, function(i, name) {
-    $.get("/feed/" + name, function (data) {
-      var items = [];
-      $(data).find("entry").each(function () { // or "item" or whatever suits your feed
-        var el = $(this);
-        var item = {
-          title: el.find("title").text(),
-          author: el.find("author").text(),
-          updated: moment(el.find("updated").text()).format("LLL"),
-          link: el.find("link").text(),
-        };
-        items.push(item);
+    $.each(feeds, function(i, feed) {
+      $.get("/feed/" + feed.Name, function (data) {
+        var items = [];
+        $(data).find("entry").each(function () { // or "item" or whatever suits your feed
+          var el = $(this);
+          var item = {
+            title: el.find("title").text(),
+            author: el.find("author").text(),
+            updated: moment(el.find("updated").text()).format("LLL"),
+            link: el.find("link").attr('href'),
+          };
+          items.push(item);
+        });
+        var html = $.render.feedTemplate({
+          title: feed.Name,
+          items: items.slice(0, 5)
+        });
+        $('.feedlist .feed-' + feed.Name).html(html);
       });
-      var html = $.render.feedTemplate({
-        title: name,
-        items: items.slice(0, 5)
-      });
-      $('.feedlist').append(html);
     });
   });
 });
