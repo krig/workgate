@@ -9,7 +9,9 @@ $(function() {
     '<div class="panel-body">',
     '<ul class="list-group">',
     '{{for items}}',
-    '<li class="list-group-item"><strong>{{>updated}}</strong> <a href="{{:link}}">{{>title}}</a> <small>{{>author}}</small></li>',
+    '<li class="list-group-item"><strong>{{>updated}}</strong> <a href="{{:link}}">{{>title}}</a> <small>{{:author}}</small>',
+    '<span class="pull-right"><img src="{{:thumbnail}}" width="30" height="30"></span>',
+    '</li>',
     '{{/for}}',
     '</ul>',
     '</div>',
@@ -33,7 +35,8 @@ $(function() {
           var el = $(this);
           var item = {
             title: el.find("title").text(),
-            author: el.find("author").text(),
+            author: el.find("author name").text(),
+            thumbnail: el.find("media\\:thumbnail,thumbnail").attr('url'),
             updated: moment(el.find("updated").text()).format("LLL"),
             link: el.find("link").attr('href'),
           };
